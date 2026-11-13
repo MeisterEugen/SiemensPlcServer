@@ -34,3 +34,8 @@ C:\Users\evgeny.muzyaev\SiemensPlcServer\obj\Debug\net10.0\ref\SiemensPlcServer.
 C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\Swashbuckle.AspNetCore.Swagger.dll
 C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+C:\Users\evgeny.muzyaev\SiemensPlcServer\obj\Debug\net10.0\SiemensPlcServer.sourcelink.json
+C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\MimeMapping.dll
+C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\Newtonsoft.Json.dll
+C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\Siemens.Simatic.S7.Webserver.API.dll
+C:\Users\evgeny.muzyaev\SiemensPlcServer\bin\Debug\net10.0\SiemensPlcServer.staticwebassets.runtime.json

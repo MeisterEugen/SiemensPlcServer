@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SiemensPlcServer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b6c8ab4c078a309ffa53839fc26f9d65c7d94ccf")]
 [assembly: System.Reflection.AssemblyProductAttribute("SiemensPlcServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SiemensPlcServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
