@@ -1,101 +1,76 @@
-using System;
-using System.Threading.Tasks;
-using Siemens.Simatic.S7.Webserver.API;
-using Siemens.Simatic.S7.Webserver.API.Services.RequestHandling;
-using Siemens.Simatic.S7.Webserver.API.Services;
+using Microsoft.Extensions.Options;
+using Siemens.Simatic.S7.Webserver.API.Enums;
+using Siemens.Simatic.S7.Webserver.API.Models;
+using Siemens.Simatic.S7.Webserver.API.Models.Requests;
 using SiemensPlcServer.Models;
-using SiemensPlcServer.Models.PlcSettings;
 
 namespace SiemensPlcServer.Services;
 
-public class PlcCommunicationService
+public sealed record TagReadResult(object? Value, bool Good, string? Error);
+
+public sealed class PlcCommunicationService
 {
-    private readonly PlcSettings _settings;
-    private ApiHttpClientRequestHandler? _requestHandler;
-    private readonly ApiStandardServiceFactory _serviceFactory;
+    private readonly PlcConnection _conn;
+    private readonly PlcOptions _opt;
+    private readonly ILogger<PlcCommunicationService> _log;
 
-    public PlcCommunicationService(PlcSettings settings)
+    public PlcCommunicationService(PlcConnection conn, IOptions<PlcOptions> opt,
+                                   ILogger<PlcCommunicationService> log)
+    { _conn = conn; _opt = opt.Value; _log = log; }
+
+    public bool IsConnected => _conn.IsConnected;
+    public string? LastError => _conn.LastError;
+
+    /// Один HTTPS-раундtrip на chunk тегов. Ошибка одного тега не ломает пакет.
+    public async Task<IReadOnlyDictionary<string, TagReadResult>> ReadTagsAsync(
+        IReadOnlyList<string> tags, CancellationToken ct)
     {
-        _settings = settings;
-        _serviceFactory = new ApiStandardServiceFactory();
-        // обход сертификата ssl 
-        ServerCertificateCallback.CertificateCallback = (sender, cert, chain, sslPolicyErrors) => true;
+        var result = new Dictionary<string, TagReadResult>(tags.Count);
+        if (tags.Count == 0) return result;
+
+        foreach (var chunk in tags.Chunk(Math.Max(1, _opt.MaxTagsPerBulk)))
+        {
+            ct.ThrowIfCancellationRequested();
+            var rf = _conn.RequestFactory;
+
+            List<IApiRequest> requests = chunk
+                .Select(t => rf.GetApiPlcProgramReadRequest(t, ApiPlcDataRepresentation.Simple))
+                .ToList();
+            requests = rf.GetApiBulkRequestWithUniqueIds(requests).ToList();
+
+            // id -> символьное имя; порядок ответа НЕ гарантирован, матчим по id
+            var byId = requests.ToDictionary(r => r.Id, r => (string)r.Params!["var"]);
+
+            var response = await _conn.ExecuteAsync((h, t) => h.ApiBulkAsync(requests, t), ct);
+
+            foreach (var ok in response.SuccessfulResponses)
+                if (byId.TryGetValue(ok.Id, out var tag))
+                    result[tag] = new TagReadResult(ok.Result, true, null);
+
+            foreach (var bad in response.ErrorResponses)
+                if (byId.TryGetValue(bad.Id, out var tag))
+                {
+                    result[tag] = new TagReadResult(null, false,
+                        $"{bad.Error?.Code}: {bad.Error?.Message}");
+                    _log.LogDebug("Тег {Tag}: {Err}", tag, result[tag].Error);
+                }
+
+            foreach (var tag in chunk)
+                result.TryAdd(tag, new TagReadResult(null, false, "нет ответа в bulk"));
+        }
+        return result;
     }
 
-    private async Task<ApiHttpClientRequestHandler> GetHandlerAsync()
-    {
-        if (_requestHandler == null)
-        {
-            var handler = await _serviceFactory.GetApiHttpClientRequestHandlerAsync(
-                _settings.IpAddress,
-                _settings.Username,
-                _settings.Password
-            );
-            _requestHandler = handler as ApiHttpClientRequestHandler;
-        }
-        return _requestHandler!;
-    }
+    
 
-    public async Task<string> ReadVariableAsync(string variableName)
-    {
-        try
-        {
-            var handler = await GetHandlerAsync();
-            var result = await handler.PlcProgramReadAsync<object>(variableName);
-            return result.Result?.ToString() ?? "null";
-        }
-        catch (Exception ex)
-        {
-            return $"Ошибка чтения: {ex.Message}";
-        }
-    }
+public Task<object?> ReadOneAsync(string tag, CancellationToken ct) =>
+    _conn.ExecuteAsync(async (h, t) =>
+        (object?)(await h.PlcProgramReadAsync<object>(tag, ApiPlcDataRepresentation.Simple, t)).Result, ct);
 
+public Task WriteAsync(string tag, object value, CancellationToken ct) =>
+    _conn.ExecuteAsync((h, t) => h.PlcProgramWriteAsync(tag, value, ApiPlcDataRepresentation.Simple, t), ct);
 
-    public async Task<string> WriteVariableAsync(string variableName, object value)
-    {
-        try
-        {
-            var handler = await GetHandlerAsync();
-            await handler.PlcProgramWriteAsync(variableName, value);
-            return "Успешно записано";
-        }
-        catch (Exception ex)
-        {
-            return $"Ошибка записи: {ex.Message}";
-        }
-    }
-
-    public async Task<Dictionary<string, object>> ReadMultipleVariablesAsync(IEnumerable<string> variableNames)
-    {
-        var handler = await GetHandlerAsync();
-        var data = new Dictionary<string, object>();
-
-        // 1. Создаем список задач (Task) для каждой переменной
-        var readTasks = variableNames.Select(async varName =>
-        {
-            try
-            {
-                var result = await handler.PlcProgramReadAsync<object>(varName);
-                // Возвращаем кортеж с именем, значением и флагом успеха
-                return (Name: varName, Value: (object)result.Result, Success: true);
-            }
-            catch (Exception ex)
-            {
-                // Если одна переменная не прочиталась, мы не ломаем весь пакет, а просто записываем ошибку в значение
-                return (Name: varName, Value: (object)$"Ошибка: {ex.Message}", Success: false);
-            }
-        });
-
-        // 2. Выполняем все HTTP-запросы параллельно (намного быстрее, чем цикл foreach)
-        var results = await Task.WhenAll(readTasks);
-
-        // 3. Собираем результаты в словарь
-        foreach (var item in results)
-        {
-            data[item.Name] = item.Value;
-        }
-
-        return data;
-    }
-
+public Task<List<ApiPlcProgramData>> BrowseChildrenAsync(string? varPath, CancellationToken ct) =>
+    _conn.ExecuteAsync(async (h, t) =>
+        (await h.PlcProgramBrowseAsync(ApiPlcProgramBrowseMode.Children, varPath, t)).Result, ct);
 }

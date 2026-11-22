@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Siemens PLC — отладочный HMI</title>
+<style>
+  body{font:14px/1.4 Consolas,monospace;background:#1e1e1e;color:#ddd;margin:0;padding:16px}
+  h2{font-size:15px;margin:16px 0 6px;color:#9cdcfe}
+  .bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .badge{padding:3px 10px;border-radius:10px;background:#333}
+  .ok{background:#1e5c2e}.bad{background:#7a2020}.warn{background:#7a5c00}
+  button{background:#0e639c;color:#fff;border:0;padding:5px 12px;cursor:pointer;border-radius:3px}
+  button:hover{background:#1177bb}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  td,th{border-bottom:1px solid #333;padding:3px 8px;text-align:left}
+  .stale{color:#888}.err{color:#f48771}
+  #log{height:180px;overflow:auto;background:#111;padding:8px;font-size:12px;white-space:pre-wrap}
+  label{margin-right:10px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Siemens PLC</b>
+  <span id="sHub"  class="badge">SignalR…</span>
+  <span id="sPlc"  class="badge">ПЛК ?</span>
+  <span id="sUdp"  class="badge">UDP ?</span>
+  <span id="sTags" class="badge">тегов 0</span>
+  <button onclick="subscribeAll()">Подписаться на всё</button>
+  <button onclick="cmd('NonRetain_DB.cmd.reset_errors',true,300)">Сброс ошибок</button>
+</div>
+
+<h2>Группы</h2>
+<div id="groups">—</div>
+
+<h2>Быстрые данные (UDP)</h2>
+<div id="tel">пакетов нет</div>
+
+<h2>Теги</h2>
+<table><thead><tr><th>Тег</th><th>Значение</th><th>Статус</th><th>Возраст</th></tr></thead>
+<tbody id="tags"></tbody></table>
+
+<h2>Журнал</h2>
+<div id="log"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.min.js"></script>
+<script>
+const tags = new Map();
+const subscribed = new Set();
+let groupList = [];
+
+const log = m => {
+  const el = document.getElementById('log');
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${m}\n` + el.textContent;
+};
+const badge = (id, text, cls) => {
+  const e = document.getElementById(id); e.textContent = text; e.className = 'badge ' + (cls||'');
+};
+
+const conn = new signalR.HubConnectionBuilder()
+  .withUrl('/plchub')
+  .withAutomaticReconnect()
+  .configureLogging(signalR.LogLevel.Warning)
+  .build();
+
+conn.on('groups', gs => {
+  groupList = gs;
+  document.getElementById('groups').innerHTML = gs.map(g =>
+    `<label><input type="checkbox" data-g="${g.name}" onchange="toggle(this)">
+     ${g.name} <small>(${g.tagCount} тегов / ${g.periodMs} мс${g.resolved?'':', раскрытие…'})</small></label>`
+  ).join('');
+  log('Группы: ' + gs.map(g => `${g.name}(${g.tagCount})`).join(', '));
+  subscribeAll();                       // имена берём у сервера — «неизвестной группы» больше не будет
+});
+
+conn.on('snapshot', m => { merge(m.values); log(`snapshot ${m.group}: ${Object.keys(m.values).length}`); });
+conn.on('delta',    m => merge(m.values));
+conn.on('events',   es => es.forEach(e => log(`СОБЫТИЕ 0x${e.code.toString(16)} ${e.name} = ${e.on}`)));
+conn.on('writeResult', r => log(`Запись ${r.tag}: ${r.ok ? 'OK' : 'ОШИБКА ' + r.error}`));
+conn.on('telemetryLost', () => badge('sUdp','UDP потерян','bad'));
+
+conn.on('telemetry', m => {
+  badge('sUdp', 'UDP seq ' + m.seq, 'ok');
+  const v = m.values;
+  document.getElementById('tel').textContent =
+    ['1','2','3'].map(n => `T${n}=${fmt(v['ch'+n+'.t'])} мм  t°=${fmt(v['ch'+n+'.temp'])}`).join('   |   ');
+});
+
+conn.on('status', s => {
+  badge('sPlc', s.plcConnected ? 'ПЛК на связи' : 'ПЛК нет', s.plcConnected ? 'ok' : 'bad');
+  badge('sTags', 'тегов ' + s.tagCount);
+  if (!s.telemetryAlive) badge('sUdp','UDP нет','warn');
+  if (s.plcError) log('ПЛК: ' + s.plcError);
+});
+
+function fmt(v){ return typeof v === 'number' ? v.toFixed(3) : String(v); }
+
+function merge(values){
+  const now = Date.now();
+  for (const [k, v] of Object.entries(values)) tags.set(k, {...v, local: now});
+  render();
+}
+
+function render(){
+  const now = Date.now();
+  const rows = [...tags.entries()].sort().map(([k, v]) => {
+    const age = ((now - v.local)/1000).toFixed(1);
+    const cls = !v.good ? 'err' : (age > 5 ? 'stale' : '');
+    const val = v.value === null ? '—' : (typeof v.value === 'number' ? v.value.toFixed(3) : v.value);
+    return `<tr class="${cls}"><td>${k}</td><td>${val}</td>
+            <td>${v.good ? 'ok' : (v.error||'bad')}</td><td>${age} с</td></tr>`;
+  });
+  document.getElementById('tags').innerHTML = rows.join('');
+}
+setInterval(render, 1000);
+
+async function toggle(cb){
+  const g = cb.dataset.g;
+  if (cb.checked) { await conn.invoke('Subscribe', [g]); subscribed.add(g); }
+  else            { await conn.invoke('Unsubscribe', [g]); subscribed.delete(g); }
+}
+async function subscribeAll(){
+  const names = groupList.map(g => g.name).filter(n => !subscribed.has(n));
+  if (!names.length) return;
+  await conn.invoke('Subscribe', names);
+  names.forEach(n => subscribed.add(n));
+  document.querySelectorAll('#groups input').forEach(i => i.checked = true);
+}
+async function cmd(tag, value, pulseMs){
+  try { const id = await conn.invoke('Write', tag, value, pulseMs||0); log('Запись ' + tag + ' → ' + id); }
+  catch(e){ log('ОТКАЗ: ' + e.message); }
+}
+
+conn.onreconnecting(() => badge('sHub','переподключение','warn'));
+conn.onreconnected(() => { badge('sHub','SignalR OK','ok'); subscribed.clear(); });
+conn.onclose(() => badge('sHub','отключён','bad'));
+
+conn.start()
+  .then(() => badge('sHub','SignalR OK','ok'))
+  .catch(e => { badge('sHub','ошибка','bad'); log(e.message); });
+</script>
+</body>
+</html>

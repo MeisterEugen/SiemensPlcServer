@@ -1,0 +1,57 @@
+{
+  "length": 512,
+  "fields": [
+    { "name": "seq",              "offset": 0,  "type": "u32" },
+    { "name": "plc_ts_ms",        "offset": 4,  "type": "u64" },
+    { "name": "sys_state",        "offset": 12, "type": "u16" },
+    { "name": "status_bits",      "offset": 14, "type": "u16" },
+    { "name": "active_ch_mask",   "offset": 16, "type": "u8"  },
+    { "name": "system_ready",     "offset": 14, "type": "bit", "bit": 0 },
+    { "name": "system_error",     "offset": 14, "type": "bit", "bit": 1 },
+    { "name": "system_warning",   "offset": 14, "type": "bit", "bit": 2 },
+    { "name": "system_fatal",     "offset": 14, "type": "bit", "bit": 3 },
+    { "name": "any_hv_on",        "offset": 14, "type": "bit", "bit": 4 },
+    { "name": "metal_in_stand",   "offset": 14, "type": "bit", "bit": 5 },
+    { "name": "service_mode",     "offset": 14, "type": "bit", "bit": 6 },
+
+    { "name": "ch1.t",            "offset": 20, "type": "f32" },
+    { "name": "ch1.t_avg",        "offset": 24, "type": "f32" },
+    { "name": "ch1.temp",         "offset": 28, "type": "f32" },
+    { "name": "ch1.i_filt",       "offset": 32, "type": "f32" },
+    { "name": "ch1.dev",          "offset": 36, "type": "f32" },
+    { "name": "ch1.valid",        "offset": 40, "type": "bit", "bit": 0 },
+    { "name": "ch1.strip_valid",  "offset": 40, "type": "bit", "bit": 1 },
+
+    { "name": "ch2.t",            "offset": 44, "type": "f32" },
+    { "name": "ch2.t_avg",        "offset": 48, "type": "f32" },
+    { "name": "ch2.temp",         "offset": 52, "type": "f32" },
+    { "name": "ch2.i_filt",       "offset": 56, "type": "f32" },
+    { "name": "ch2.dev",          "offset": 60, "type": "f32" },
+    { "name": "ch2.valid",        "offset": 64, "type": "bit", "bit": 0 },
+    { "name": "ch2.strip_valid",  "offset": 64, "type": "bit", "bit": 1 },
+
+    { "name": "ch3.t",            "offset": 68, "type": "f32" },
+    { "name": "ch3.t_avg",        "offset": 72, "type": "f32" },
+    { "name": "ch3.temp",         "offset": 76, "type": "f32" },
+    { "name": "ch3.i_filt",       "offset": 80, "type": "f32" },
+    { "name": "ch3.dev",          "offset": 84, "type": "f32" },
+    { "name": "ch3.valid",        "offset": 88, "type": "bit", "bit": 0 },
+    { "name": "ch3.strip_valid",  "offset": 88, "type": "bit", "bit": 1 },
+
+    { "name": "wedge_um",         "offset": 92,  "type": "f32" },
+    { "name": "wedge_pct",        "offset": 96,  "type": "f32" },
+    { "name": "crown_um",         "offset": 100, "type": "f32" },
+    { "name": "crown_pct",        "offset": 104, "type": "f32" },
+    { "name": "profile_valid",    "offset": 108, "type": "bit", "bit": 0 },
+
+    { "name": "T_nominal",        "offset": 112, "type": "f32" },
+    { "name": "T_min_sv",         "offset": 116, "type": "f32" },
+    { "name": "T_max_sv",         "offset": 120, "type": "f32" },
+    { "name": "strip_width",      "offset": 124, "type": "f32" },
+    { "name": "strip_speed",      "offset": 128, "type": "f32" },
+    { "name": "strip_temp_C",     "offset": 132, "type": "f32" },
+    { "name": "strip_id",         "offset": 136, "type": "ascii", "length": 8 },
+    { "name": "thickness_ok",     "offset": 144, "type": "bit", "bit": 0 },
+    { "name": "strip_ok",         "offset": 144, "type": "bit", "bit": 1 }
+  ]
+}
